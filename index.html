@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="fr"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f4d36">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Forêt">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="maplibre-gl.css">
+<title>Carte forestière</title>
+<style>
+:root{--sp:#1f4d36;--bi:#f5f3ec;--ink:#16281e;--red:#b3261e;--mu:#55645b;--t:env(safe-area-inset-top,0px);--b:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}html,body{height:100%;margin:0;font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bi)}
+#map{position:fixed;inset:0}
+.fab{position:fixed;z-index:20;width:48px;height:48px;border-radius:12px;border:1px solid var(--sp);background:var(--bi);color:var(--sp);font-size:22px;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 1px 6px rgba(0,0,0,.3)}
+#menuBtn{left:12px;top:calc(var(--t) + 12px)}
+#baseBtn{left:12px;bottom:calc(var(--b) + 24px);font-size:11px;font-weight:700;line-height:1.1;text-align:center}
+#northBtn{right:12px;bottom:calc(var(--b) + 40px);border-radius:50%;width:52px;height:52px}
+#northBtn svg{transition:transform .05s}
+.maplibregl-ctrl-bottom-left{left:70px!important;margin-bottom:calc(var(--b) + 6px)}
+.maplibregl-ctrl-top-right{margin-top:var(--t)}
+#baseSheet{position:fixed;z-index:25;left:12px;bottom:calc(var(--b) + 80px);background:var(--bi);border-radius:10px;padding:6px;box-shadow:0 2px 12px rgba(0,0,0,.3);display:none}
+#baseSheet button{display:block;width:100%;text-align:left;border:0;background:none;padding:12px 16px;font-size:16px;color:var(--ink);border-radius:8px}
+#baseSheet button.on{background:var(--sp);color:#fff}
+#drawer{position:fixed;z-index:40;top:0;bottom:0;left:0;width:min(88vw,380px);background:var(--bi);transform:translateX(-102%);transition:transform .2s;overflow:auto;padding:calc(var(--t) + 12px) 14px calc(var(--b) + 20px);box-shadow:2px 0 14px rgba(0,0,0,.35)}
+#drawer.open{transform:none}
+h2{font-size:18px;margin:0}h3{font-size:15px;margin:18px 0 8px;color:var(--sp);text-transform:uppercase;letter-spacing:.04em}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.lay{background:#fff;border:1px solid #d5dbd7;border-radius:10px;padding:8px 10px;margin-bottom:8px}
+.lay input[type=range]{width:100%}
+.ib{border:1px solid var(--sp);background:var(--bi);color:var(--sp);border-radius:8px;width:36px;height:36px;font-size:16px;padding:0}
+.btn{background:var(--sp);color:#fff;border:0;border-radius:10px;padding:13px;font-size:16px;font-weight:700;width:100%}
+.btn:disabled{opacity:.4}.btn.g{background:none;color:var(--red);border:1px solid var(--red)}
+input[type=text],select{width:100%;font-size:16px;padding:10px;border:1px solid var(--sp);border-radius:8px;margin:4px 0;background:#fff;color:var(--ink)}
+.sm{font-size:13px;color:var(--mu)}.err{color:var(--red)}.ok{color:var(--sp)}
+.bar{height:10px;border-radius:5px;background:#d5dbd7;overflow:hidden;margin:8px 0}.bar i{display:block;height:100%;width:0;background:var(--sp)}
+#card{position:fixed;z-index:30;left:70px;right:12px;bottom:calc(var(--b) + 90px);background:var(--bi);border-radius:10px;padding:10px 12px;box-shadow:0 2px 12px rgba(0,0,0,.3);max-height:35vh;overflow:auto;display:none}
+#card pre{margin:4px 0 0;white-space:pre-wrap;font:12px/1.35 ui-monospace,Menlo,monospace}
+#scrim{position:fixed;inset:0;z-index:35;background:rgba(0,0,0,.35);display:none}
+</style></head><body>
+<div id="fail" style="display:none;position:fixed;z-index:99;left:70px;right:8px;top:calc(env(safe-area-inset-top,0px) + 12px);background:#b3261e;color:#fff;padding:10px 12px;border-radius:10px;font-size:14px;line-height:1.3"><span id="failT"></span><button id="fixB" style="display:block;margin-top:8px;border:1px solid #fff;background:none;color:#fff;border-radius:8px;padding:8px 12px;font-size:14px">Réparer l’application</button></div>
+<script>
+var __t;
+function __fail(m){var f=document.getElementById('fail');if(!f)return;document.getElementById('failT').textContent=m;f.style.display='block';clearTimeout(__t);__t=setTimeout(function(){f.style.display='none'},15000);}
+window.addEventListener('error',function(e){__fail('Erreur : '+(e.message||'inconnue'))});
+window.addEventListener('unhandledrejection',function(e){var m=(e.reason&&e.reason.message)||String(e.reason);if(!/abort/i.test(m))__fail('Erreur : '+m)});
+document.addEventListener('DOMContentLoaded',function(){document.getElementById('fixB').onclick=async function(){
+  if(!confirm('Cela efface les réglages et les cartes téléchargées, puis recharge l’application. Continuer ?'))return;
+  try{localStorage.clear()}catch(e){}
+  try{var rs=await navigator.serviceWorker.getRegistrations();rs.forEach(function(r){r.unregister()})}catch(e){}
+  try{var ks=await caches.keys();await Promise.all(ks.map(function(k){return caches.delete(k)}))}catch(e){}
+  location.reload();}});
+</script>
+<div id="map"></div>
+<button class="fab" id="menuBtn" aria-label="Menu">☰</button>
+<button class="fab" id="baseBtn" aria-label="Fond de carte">Fond<br>de carte</button>
+<button class="fab" id="northBtn" aria-label="Nord"><svg id="nArrow" width="30" height="30" viewBox="0 0 30 30"><polygon points="15,2 22,16 15,13 8,16" fill="#b3261e"/><polygon points="15,28 8,16 15,13 22,16" fill="#1f4d36"/></svg></button>
+<div id="baseSheet"><button data-b="relief">Relief</button><button data-b="sat">Satellite</button></div>
+<div id="card"><div class="row"><b>Fiche</b><button class="ib" id="cardX">✕</button></div><pre id="cardT"></pre></div>
+<div id="scrim"></div>
+<aside id="drawer">
+  <div class="row"><h2>Menu</h2><button class="ib" id="closeM">✕</button></div>
+  <h3>Couches</h3><div id="layers"></div>
+  <h3>Ajouter un WMS</h3>
+  <input type="text" id="wUrl" placeholder="Adresse du service (https://…)" inputmode="url">
+  <input type="text" id="wLay" placeholder="Nom de la couche">
+  <input type="text" id="wTit" placeholder="Titre (facultatif)">
+  <button class="btn" id="wAdd">Ajouter la couche</button><div class="sm" id="wMsg"></div>
+  <h3>Importer</h3>
+  <input type="file" id="iFile" multiple hidden>
+  <button class="btn" id="iBtn">PDF géoréférencé ou shapefile</button>
+  <div class="sm" id="iMsg">PDF : un GeoPDF. Shapefile : un .zip (ou .shp + .dbf + .prj ensemble).</div>
+  <h3>Satellite et diagnostic</h3>
+  <input type="text" id="satUrl" inputmode="url" placeholder="Adresse WMS du satellite">
+  <button class="btn" id="satList" style="margin:4px 0 6px">Lire les couches satellite</button>
+  <select id="satSel" style="display:none"></select>
+  <button class="btn" id="diag" style="margin-top:6px">Tester les services</button>
+  <pre class="sm" id="dOut" style="white-space:pre-wrap;margin:6px 0"></pre>
+  <h3>Hors-ligne</h3>
+  <div class="sm">Télécharge la zone visible : fond choisi + couches cochées.</div>
+  <div class="row" style="margin-top:6px"><span>Détail</span><select id="zmax" style="width:auto"><option value="14">Moyen</option><option value="15" selected>Détaillé</option><option value="16">Très détaillé</option></select></div>
+  <div class="sm" id="est" style="margin:6px 0"></div>
+  <button class="btn" id="go">Télécharger cette zone</button>
+  <div class="bar" id="barW" style="display:none"><i id="bar"></i></div>
+  <div class="sm" id="prog"></div>
+  <button class="btn g" id="stop" style="display:none;margin-top:6px">Arrêter</button>
+  <div class="sm" id="stat" style="margin:10px 0"></div>
+  <button class="btn g" id="wipe">Effacer les cartes téléchargées</button>
+</aside>
+<script src="maplibre-gl.js" onerror="__fail('Le fichier maplibre-gl.js est introuvable : publie-le avec les autres fichiers.')"></script>
+<script>
+(() => {
+'use strict';
+if (typeof maplibregl === 'undefined') { __fail('La bibliothèque de carte (maplibre-gl.js) n’a pas chargé.'); return; }
+const $ = id => document.getElementById(id), CACHE = 'tuiles-v1', O = 20037508.342789244;
+const WMS = 'https://geoegl.msp.gouv.qc.ca/ws/mffpecofor.fcgi';
+const bb = (z, x, y) => { const s = 2 * O / 2 ** z, a = -O + x * s, d = O - y * s; return [a, d - s, a + s, d].map(v => v.toFixed(3)).join(','); };
+const wmsU = (base, layer, style, fmt) => (z, x, y) => base + (base.includes('?') ? '&' : '?') +
+  `SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${encodeURIComponent(layer)}&STYLES=${style}&FORMAT=${fmt}&TRANSPARENT=${fmt === 'image/png' ? 'TRUE' : 'FALSE'}&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX=${bb(z, x, y)}`;
+const SAT_URL = 'https://servicesmatriciels.mern.gouv.qc.ca/erdas-iws/ogc/wms/Sentinel-2';
+// ---- À AJUSTER ICI si un service change ----
+const LAYERS = {
+  base: { url: (z, x, y) => `https://geoegl.msp.gouv.qc.ca/carto/tms/1.0.0/carte_gouv_qc_public@EPSG_3857/${z}/${x}/${(1 << z) - 1 - y}.png`, minZ: 0, maxZ: 17, kb: 15 },
+  dem:  { url: (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`, minZ: 0, maxZ: 14, kb: 8 },
+  sat:  { url: (z, x, y) => wmsU(cfg.satUrl || SAT_URL, cfg.satUrl ? cfg.satLayer || '' : '', '', 'image/jpeg')(z, x, y), minZ: 6, maxZ: 16, kb: 25 },
+  peup: { url: wmsU(WMS, 'ori_pee_close_scale', 'Couleur_sans_etiquette', 'image/png'), minZ: 13, maxZ: 17, kb: 20 },
+};
+// --------------------------------------------
+const store = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const cfg = store('cfg2', { base: 'relief', order: ['peup'], vis: { peup: true }, op: { peup: 0.6 }, user: [], titles: { peup: 'Peuplements écoforestiers' } });
+cfg.user.forEach(u => { LAYERS[u.id] = { url: wmsU(u.url, u.layer, '', 'image/png'), minZ: 0, maxZ: 17, kb: 20 }; });
+if (cfg.base === 'sat' && !(cfg.satUrl && cfg.satLayer)) cfg.base = 'relief';
+cfg.kinds ||= {}; cfg.docs ||= []; if (!cfg.satUrl) delete cfg.satLayer;
+const save = () => localStorage.setItem('cfg2', JSON.stringify(cfg));
+
+// Tuiles : d’abord celles du téléphone, sinon le réseau
+maplibregl.addProtocol('qc', async (p, ac) => {
+  const m = p.url.match(/^qc:\/\/([^/]+)\/(\d+)\/(\d+)\/(\d+)/), L = LAYERS[m[1]];
+  const u = L.url(+m[2], +m[3], +m[4]), c = await caches.open(CACHE);
+  let r = await c.match(u, { ignoreVary: true });
+  if (!r) r = await fetch(u, { signal: ac.signal });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return { data: await r.arrayBuffer() };
+});
+const src = (k, o = {}) => ({ type: 'raster', tiles: [`qc://${k}/{z}/{x}/{y}`], tileSize: 256, minzoom: LAYERS[k].minZ, maxzoom: LAYERS[k].maxZ, ...o });
+const style = { version: 8, sources: {
+    base: src('base'), sat: src('sat'), peup: src('peup'),
+    dem: { type: 'raster-dem', tiles: ['qc://dem/{z}/{x}/{y}'], tileSize: 256, encoding: 'terrarium', maxzoom: 14 } },
+  layers: [{ id: 'base', type: 'raster', source: 'base' }, { id: 'sat', type: 'raster', source: 'sat', layout: { visibility: 'none' } },
+    { id: 'hill', type: 'hillshade', source: 'dem', paint: { 'hillshade-exaggeration': 0.5 } },
+    { id: 'peup', type: 'raster', source: 'peup' }] };
+let map; try { map = new maplibregl.Map({ container: 'map', style, center: [-72.79, 47.43], zoom: 10, maxZoom: 18, pitchWithRotate: false, attributionControl: false }); } catch (err) { __fail('Carte impossible à démarrer : ' + err.message); return; }
+map.on('error', e => { const m = (e.error && e.error.message) || ''; if (/abort/i.test(m)) return; __fail('Carte : ' + (e.sourceId ? e.sourceId + ' — ' : '') + m.slice(0, 140)); });
+map.touchPitch?.disable();
+map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: '© Gouvernement du Québec · Sentinel-2 © Copernicus · relief : Mapzen/AWS' }), 'bottom-right');
+map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-left');
+map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), 'top-right');
+
+// ---- Fond de carte & nord ----
+function setBase(b) {
+  cfg.base = b; const v = (id, on) => map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  v('base', b === 'relief'); v('hill', b === 'relief'); v('sat', b === 'sat');
+  document.querySelectorAll('#baseSheet button').forEach(x => x.classList.toggle('on', x.dataset.b === b));
+  save(); refresh();
+}
+$('baseBtn').onclick = () => { const s = $('baseSheet'); s.style.display = s.style.display === 'block' ? 'none' : 'block'; };
+document.querySelectorAll('#baseSheet button').forEach(x => x.onclick = () => { if (x.dataset.b === 'sat' && !(cfg.satUrl && cfg.satLayer)) { __fail('Choisis d’abord la couche satellite : menu ☰ → Satellite et diagnostic → Lire les couches.'); $('baseSheet').style.display = 'none'; return; } setBase(x.dataset.b); $('baseSheet').style.display = 'none'; });
+$('northBtn').onclick = () => map.easeTo({ bearing: 0, pitch: 0 });
+map.on('rotate', () => { $('nArrow').style.transform = `rotate(${-map.getBearing()}deg)`; });
+
+// ---- Menu & couches ----
+const openM = o => { $('drawer').classList.toggle('open', o); $('scrim').style.display = o ? 'block' : 'none'; if (o) refresh(); };
+$('menuBtn').onclick = () => openM(true); $('closeM').onclick = $('scrim').onclick = () => openM(false);
+const DOCS = 'documents-v1', kind = id => cfg.kinds[id] || 'r', mls = id => kind(id) === 'v' ? [id + '-f', id + '-l', id + '-c'] : [id];
+function apply() {
+  cfg.order.forEach(id => { const v = cfg.vis[id] ? 'visible' : 'none', o = cfg.op[id] ?? 1;
+    mls(id).forEach(l => { map.moveLayer(l); map.setLayoutProperty(l, 'visibility', v); });
+    if (kind(id) === 'v') { map.setPaintProperty(id + '-f', 'fill-opacity', 0.35 * o); map.setPaintProperty(id + '-l', 'line-opacity', o); map.setPaintProperty(id + '-c', 'circle-opacity', o); }
+    else map.setPaintProperty(id, 'raster-opacity', o); });
+  save();
+}
+function list() {
+  const box = $('layers'); box.innerHTML = '';
+  [...cfg.order].reverse().forEach(id => {            // la couche du dessus est en haut de la liste
+    const i = cfg.order.indexOf(id), d = document.createElement('div'); d.className = 'lay';
+    d.innerHTML = `<div class="row"><label style="display:flex;gap:8px;align-items:center;flex:1"><input type="checkbox" ${cfg.vis[id] ? 'checked' : ''}>
+      <span>${(cfg.titles[id] || id).replace(/</g, '&lt;')}</span></label>
+      <button class="ib" data-a="up" ${i === cfg.order.length - 1 ? 'disabled' : ''}>▲</button><button class="ib" data-a="dn" ${i === 0 ? 'disabled' : ''}>▼</button>
+      ${id === 'peup' ? '' : '<button class="ib" data-a="rm" style="color:#b3261e;border-color:#b3261e">✕</button>'}</div>
+      <input type="range" min="0.1" max="1" step="0.05" value="${cfg.op[id] ?? 1}">`;
+    d.querySelector('input[type=checkbox]').onchange = e => { cfg.vis[id] = e.target.checked; apply(); refresh(); };
+    d.querySelector('input[type=range]').oninput = e => { cfg.op[id] = +e.target.value; apply(); };
+    d.querySelectorAll('button').forEach(b => b.onclick = () => {
+      const a = b.dataset.a, o = cfg.order;
+      if (a === 'up') [o[i], o[i + 1]] = [o[i + 1], o[i]];
+      if (a === 'dn') [o[i], o[i - 1]] = [o[i - 1], o[i]];
+      if (a === 'rm') { mls(id).forEach(l => map.removeLayer(l)); map.removeSource(id); o.splice(i, 1); cfg.docs = cfg.docs.filter(d => d.id !== id); delete cfg.kinds[id]; caches.open(DOCS).then(c => c.delete('local/' + id)); cfg.user = cfg.user.filter(u => u.id !== id); delete LAYERS[id]; }
+      apply(); list(); refresh();
+    });
+    box.appendChild(d);
+  });
+}
+function addUser(u) {
+  map.addSource(u.id, src(u.id)); map.addLayer({ id: u.id, type: 'raster', source: u.id });
+}
+$('wAdd').onclick = () => {
+  const url = $('wUrl').value.trim(), layer = $('wLay').value.trim(), m = $('wMsg');
+  if (!/^https:\/\//i.test(url) || !layer) { m.className = 'sm err'; m.textContent = 'Il faut une adresse https et un nom de couche.'; return; }
+  const u = { id: 'w' + Date.now(), url, layer }; LAYERS[u.id] = { url: wmsU(url, layer, '', 'image/png'), minZ: 0, maxZ: 17, kb: 20 };
+  cfg.user.push(u); cfg.order.push(u.id); cfg.vis[u.id] = true; cfg.op[u.id] = 1; cfg.titles[u.id] = $('wTit').value.trim() || layer;
+  addUser(u); apply(); list(); refresh(); m.className = 'sm ok'; m.textContent = 'Couche ajoutée. Si rien ne s’affiche, le service refuse peut-être l’accès depuis un site web (CORS).';
+};
+map.on('load', async () => { try { cfg.user.forEach(addUser); } catch (e) { __fail('Couche WMS : ' + e.message); } try { await restoreDocs(); } catch (e) { __fail('Fichiers importés : ' + e.message); } setBase(cfg.base); apply(); list(); });
+
+// ---- Fiche d’un peuplement (réseau requis) ----
+map.on('click', async e => {
+  const vl = cfg.order.filter(i => kind(i) === 'v').flatMap(mls).filter(l => map.getLayer(l)), vf = vl.length ? map.queryRenderedFeatures(e.point, { layers: vl }) : [];
+  if (vf.length) { $('card').style.display = 'block'; $('cardT').textContent = Object.entries(vf[0].properties).map(([k, v]) => k + ' : ' + v).join('\n'); return; }
+  if (!cfg.vis.peup || map.getZoom() < 12 || !navigator.onLine) return;
+  const mc = maplibregl.MercatorCoordinate.fromLngLat(e.lngLat), cx = (mc.x - 0.5) * 2 * O, cy = (0.5 - mc.y) * 2 * O;
+  const half = 50 * 2 * O / (512 * 2 ** map.getZoom());
+  const u = `${WMS}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetFeatureInfo&LAYERS=ori_pee_close_scale&QUERY_LAYERS=ori_pee_close_scale&STYLES=&CRS=EPSG:3857` +
+    `&BBOX=${[cx - half, cy - half, cx + half, cy + half].join(',')}&WIDTH=101&HEIGHT=101&I=50&J=50&INFO_FORMAT=text/plain&FEATURE_COUNT=1`;
+  $('card').style.display = 'block'; $('cardT').textContent = 'Chargement…';
+  try { const t = (await (await fetch(u)).text()).trim(); $('cardT').textContent = t.length > 2500 ? t.slice(0, 2500) + '…' : t || 'Aucun peuplement ici.'; }
+  catch { $('cardT').textContent = 'Fiche indisponible (réseau ou serveur).'; }
+});
+$('cardX').onclick = () => $('card').style.display = 'none';
+
+// ---- Téléchargement de la zone ----
+const lon2x = (l, z) => Math.floor((l + 180) / 360 * 2 ** z);
+const lat2y = (l, z) => { const r = l * Math.PI / 180; return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 2 ** z); };
+function plan() {
+  const b = map.getBounds(), zc = Math.floor(map.getZoom() + 1), zmax = +$('zmax').value, urls = [];
+  const keys = [...(cfg.base === 'sat' ? ['sat'] : ['base', 'dem']), ...cfg.order.filter(k => cfg.vis[k])]; let kb = 0;
+  for (const k of keys) { const d = LAYERS[k];
+    for (let z = Math.max(d.minZ, zc - 2, 6); z <= Math.min(zmax, d.maxZ); z++) { const lim = 2 ** z - 1;
+      const x0 = Math.max(0, lon2x(b.getWest(), z)), x1 = Math.min(lim, lon2x(b.getEast(), z)), y0 = Math.max(0, lat2y(b.getNorth(), z)), y1 = Math.min(lim, lat2y(b.getSouth(), z));
+      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { urls.push(d.url(z, x, y)); kb += d.kb; } } }
+  return { urls, mo: Math.round(kb / 1024) };
+}
+const MAXT = 12000;
+function refresh() {
+  if (!$('drawer').classList.contains('open')) return;
+  const p = plan(), over = p.urls.length > MAXT;
+  $('est').innerHTML = over ? `<span class="err">${p.urls.length.toLocaleString('fr-CA')} tuiles : zone trop grande. Rapproche la carte ou réduis le détail.</span>` : `${p.urls.length.toLocaleString('fr-CA')} tuiles · environ ${p.mo} Mo (estimation)`;
+  $('go').disabled = over || !p.urls.length; stat();
+}
+async function stat() { let s = ''; try { const e = await navigator.storage.estimate(); s = `${Math.round((e.usage || 0) / 1048576)} Mo utilisés sur le téléphone`; } catch {} $('stat').textContent = s; }
+$('zmax').onchange = refresh; map.on('moveend', refresh);
+let ctl, wake;
+const say = (t, bad) => { $('prog').textContent = t; $('prog').className = 'sm ' + (bad ? 'err' : 'ok'); };
+const busy = b => { $('go').style.display = b ? 'none' : ''; $('stop').style.display = b ? '' : 'none'; $('barW').style.display = b ? '' : 'none'; };
+$('go').onclick = async () => {
+  const { urls } = plan(); ctl = new AbortController(); busy(true); say(''); $('bar').style.width = '0';
+  try { wake = await navigator.wakeLock?.request('screen'); } catch {}
+  try { await navigator.storage?.persist?.(); } catch {}
+  const cache = await caches.open(CACHE); let i = 1, done = 0, fail = 0, bytes = 0;
+  const upd = () => { $('bar').style.width = (100 * done / urls.length).toFixed(1) + '%'; say(`${done.toLocaleString('fr-CA')} / ${urls.length.toLocaleString('fr-CA')} tuiles · ${Math.round(bytes / 1048576)} Mo`); };
+  const one = async u => { if (await cache.match(u, { ignoreVary: true })) return;
+    const r = await fetch(u, { mode: 'cors', signal: ctl.signal }); if (!r.ok) { fail++; return; }
+    const bl = await r.blob(); bytes += bl.size; await cache.put(u, new Response(bl, { headers: { 'content-type': r.headers.get('content-type') || 'image/png' } })); };
+  const fin = (t, bad) => { try { wake?.release(); } catch {} busy(false); say(t, bad); stat(); };
+  try { await one(urls[0]); done = 1; upd(); } catch { return fin(ctl.signal.aborted ? 'Arrêté.' : navigator.onLine ? 'Le serveur refuse la copie hors-ligne depuis un site web (CORS).' : 'Pas de réseau.', true); }
+  await Promise.all(Array.from({ length: 6 }, async () => { while (i < urls.length && !ctl.signal.aborted) { const u = urls[i++]; try { await one(u); } catch { if (ctl.signal.aborted) return; fail++; } done++; if (done % 10 === 0) upd(); } }));
+  upd(); fin(ctl.signal.aborted ? `Arrêté : ${done} tuiles enregistrées.` : `Zone téléchargée (${done - fail} tuiles${fail ? `, ${fail} manquantes` : ''}). Disponible sans réseau.`);
+};
+$('stop').onclick = () => ctl?.abort();
+$('wipe').onclick = async () => { if (confirm('Effacer toutes les cartes téléchargées ?')) { await caches.delete(CACHE); say('Cartes effacées.'); stat(); } };
+
+// ---- Couches importées : PDF géoréférencés et shapefiles ----
+const PAL = ['#e4572e', '#2e86ab', '#f2a900', '#7b2d8e', '#1b998b', '#c1121f'];
+const loadJs = s => new Promise((ok, ko) => { const e = document.createElement('script'); e.src = s; e.onload = ok; e.onerror = () => ko(new Error('Fichier manquant : ' + s + ' (publie-le avec les autres).')); document.head.appendChild(e); });
+const imsg = (t, bad) => { $('iMsg').textContent = t; $('iMsg').className = 'sm ' + (bad ? 'err' : 'ok'); };
+function addImported(d, data) {
+  if (d.kind === 'v') {
+    map.addSource(d.id, { type: 'geojson', data });
+    map.addLayer({ id: d.id + '-f', type: 'fill', source: d.id, filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': d.color, 'fill-opacity': 0.35 } });
+    map.addLayer({ id: d.id + '-l', type: 'line', source: d.id, filter: ['!=', ['geometry-type'], 'Point'], paint: { 'line-color': d.color, 'line-width': 2 } });
+    map.addLayer({ id: d.id + '-c', type: 'circle', source: d.id, filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-color': d.color, 'circle-radius': 5, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
+  } else { map.addSource(d.id, { type: 'image', url: data, coordinates: d.coords }); map.addLayer({ id: d.id, type: 'raster', source: d.id }); }
+}
+async function restoreDocs() {
+  const c = await caches.open(DOCS);
+  for (const d of [...cfg.docs]) {
+    const r = await c.match('local/' + d.id);
+    if (!r) { cfg.docs = cfg.docs.filter(x => x.id !== d.id); cfg.order = cfg.order.filter(x => x !== d.id); continue; }
+    addImported(d, d.kind === 'v' ? await r.json() : URL.createObjectURL(await r.blob()));
+  }
+}
+async function register(d, body, bounds, mime) {
+  (await caches.open(DOCS)).put('local/' + d.id, new Response(body, { headers: { 'content-type': mime } }));
+  cfg.docs.push(d); cfg.kinds[d.id] = d.kind; cfg.order.push(d.id); cfg.vis[d.id] = true; cfg.op[d.id] = 1; cfg.titles[d.id] = d.title;
+  addImported(d, d.kind === 'v' ? body : URL.createObjectURL(body)); apply(); list();
+  if (bounds) map.fitBounds(bounds, { padding: 40, maxZoom: 16 });
+}
+function walk(c, f) { Array.isArray(c[0]) ? c.forEach(x => walk(x, f)) : f(c); }
+async function addVec(g, title) {
+  const bb = [180, 90, -180, -90]; let n = 0;
+  (g.features || []).forEach(ft => { n++; if (ft.geometry) walk(ft.geometry.coordinates, p => { bb[0] = Math.min(bb[0], p[0]); bb[1] = Math.min(bb[1], p[1]); bb[2] = Math.max(bb[2], p[0]); bb[3] = Math.max(bb[3], p[1]); }); });
+  if (!n || bb[0] < -180 || bb[2] > 180 || bb[1] < -90 || bb[3] > 90 || bb[0] > bb[2]) throw new Error('Coordonnées inutilisables : le fichier .prj (projection) est probablement manquant. Utilise le .zip complet.');
+  await register({ id: 's' + Date.now() + Math.floor(Math.random() * 99), kind: 'v', title, color: PAL[cfg.docs.length % PAL.length] }, JSON.stringify(g), [[bb[0], bb[1]], [bb[2], bb[3]]], 'application/json');
+  imsg(`« ${title} » ajoutée (${n} objets).`);
+}
+async function importVec(files) {
+  const by = x => files.find(f => new RegExp('\\.' + x + '$', 'i').test(f.name)), nm = f => f.name.replace(/\.\w+$/, '');
+  const gj = by('geojson') || by('json'), zip = by('zip'), s = by('shp'); let sets;
+  if (gj) sets = [JSON.parse(await gj.text())];
+  else { await loadJs('shp.min.js');
+    if (zip) { const r = await shp(await zip.arrayBuffer()); sets = Array.isArray(r) ? r : [r]; }
+    else if (s) { const db = by('dbf'), pr = by('prj'), geo = shp.parseShp(await s.arrayBuffer(), pr ? await pr.text() : undefined);
+      sets = [db ? shp.combine([geo, shp.parseDbf(await db.arrayBuffer())]) : { type: 'FeatureCollection', features: geo.map(g => ({ type: 'Feature', properties: {}, geometry: g })) }]; }
+    else throw new Error('Choisis un .zip, ou le .shp avec son .dbf et son .prj.'); }
+  for (const g of sets) await addVec(g, nm(zip || s || gj) + (g.fileName ? ' – ' + g.fileName : ''));
+}
+function fit(P, Y) {
+  const A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], B = [0, 0, 0];
+  P.forEach((r, i) => { for (let a = 0; a < 3; a++) { B[a] += r[a] * Y[i]; for (let b = 0; b < 3; b++) A[a][b] += r[a] * r[b]; } });
+  for (let i = 0; i < 3; i++) { let p = i; for (let j = i + 1; j < 3; j++) if (Math.abs(A[j][i]) > Math.abs(A[p][i])) p = j;
+    [A[i], A[p]] = [A[p], A[i]]; [B[i], B[p]] = [B[p], B[i]];
+    if (Math.abs(A[i][i]) < 1e-12) throw new Error('Points de calage insuffisants dans le PDF.');
+    for (let j = i + 1; j < 3; j++) { const f = A[j][i] / A[i][i]; for (let k = i; k < 3; k++) A[j][k] -= f * A[i][k]; B[j] -= f * B[i]; } }
+  const x = [0, 0, 0]; for (let i = 2; i >= 0; i--) { let t = B[i]; for (let k = i + 1; k < 3; k++) t -= A[i][k] * x[k]; x[i] = t / A[i][i]; } return x;
+}
+async function importPdf(file) {
+  await loadJs('pdf.min.js'); pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
+  const buf = await file.arrayBuffer(), txt = new TextDecoder('latin1').decode(buf), nums = s => s.trim().split(/[\s,]+/).map(Number).filter(n => !isNaN(n));
+  const gm = /\/GPTS\s*\[([^\]]+)\]/.exec(txt), lm = /\/LPTS\s*\[([^\]]+)\]/.exec(txt);
+  if (!gm || !lm) throw new Error('Aucune géoréférence lisible dans ce PDF : ce n’est peut-être pas un GeoPDF, ou ses données sont compressées.');
+  let G = nums(gm[1]); const Lp = nums(lm[1]);
+  if (G.length < 6 || G.length !== Lp.length) throw new Error('Géoréférence incomplète dans le PDF.');
+  if (G.some((v, i) => i % 2 === 0 && Math.abs(v) > 90)) G = G.map((v, i) => G[i % 2 ? i - 1 : i + 1]);   // lon/lat inversés
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise, page = await pdf.getPage(1), view = page.view;
+  if (page.rotate) throw new Error('Page pivotée : non prise en charge.');
+  let box = view, best = 4000;
+  for (const m of txt.matchAll(/\/BBox\s*\[([^\]]+)\]/g)) { const d = Math.abs(m.index - gm.index), n = nums(m[1]); if (d < best && n.length === 4) { best = d; box = n; } }
+  const bw = box[2] - box[0], bh = box[3] - box[1], s = Math.min(4096 / Math.max(bw, bh), 3), cv = document.createElement('canvas'), cx = cv.getContext('2d');
+  cv.width = Math.round(bw * s); cv.height = Math.round(bh * s); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+  await page.render({ canvasContext: cx, viewport: page.getViewport({ scale: s }), transform: [1, 0, 0, 1, -(box[0] - view[0]) * s, -(view[3] - box[3]) * s] }).promise;
+  const P = [], la = [], lo = []; for (let i = 0; i < Lp.length; i += 2) { P.push([1, Lp[i], Lp[i + 1]]); la.push(G[i]); lo.push(G[i + 1]); }
+  const fa = fit(P, la), fo = fit(P, lo), at = (u, v) => [fo[0] + fo[1] * u + fo[2] * v, fa[0] + fa[1] * u + fa[2] * v];
+  const co = [at(0, 1), at(1, 1), at(1, 0), at(0, 0)];
+  if (co.some(c => Math.abs(c[0]) > 180 || Math.abs(c[1]) > 90)) throw new Error('Coordonnées du PDF hors du globe.');
+  const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.9)), xs = co.map(c => c[0]), ys = co.map(c => c[1]);
+  await register({ id: 'p' + Date.now(), kind: 'r', title: file.name.replace(/\.pdf$/i, ''), coords: co }, blob, [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], 'image/jpeg');
+  imsg(`« ${file.name} » ajouté (${cv.width}×${cv.height} px).`);
+}
+$('iBtn').onclick = () => $('iFile').click();
+$('iFile').onchange = async e => {
+  const fs = [...e.target.files]; e.target.value = ''; if (!fs.length) return; imsg('Lecture…');
+  try { const pdf = fs.find(f => /\.pdf$/i.test(f.name)); pdf ? await importPdf(pdf) : await importVec(fs); openM(false); }
+  catch (err) { imsg(err.message || String(err), true); }
+};
+
+// ---- Satellite & diagnostic ----
+$('satUrl').value = cfg.satUrl || SAT_URL;
+$('satList').onclick = async () => {
+  const base = $('satUrl').value.trim(), sel = $('satSel'), out = $('dOut');
+  if (!/^https:\/\//i.test(base)) { out.textContent = 'Il faut une adresse https.'; return; }
+  out.textContent = 'Lecture de la liste…';
+  try {
+    const r = await fetch(base + (base.includes('?') ? '&' : '?') + 'SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities');
+    const x = new DOMParser().parseFromString(await r.text(), 'text/xml');
+    const L = [...x.getElementsByTagName('Layer')].map(l => ({ n: l.getElementsByTagName('Name')[0]?.textContent, t: l.getElementsByTagName('Title')[0]?.textContent || '' })).filter(l => l.n);
+    if (!L.length) { out.textContent = 'Aucune couche trouvée à cette adresse.'; return; }
+    const pick = n => { cfg.satUrl = base; cfg.satLayer = n; save(); location.reload(); };
+    if (L.length === 1) return pick(L[0].n);
+    sel.innerHTML = ''; const o0 = document.createElement('option'); o0.value = ''; o0.textContent = `${L.length} couches : choisis…`; sel.appendChild(o0);
+    L.forEach(l => { const o = document.createElement('option'); o.value = l.n; o.textContent = l.t && l.t !== l.n ? `${l.t} (${l.n})` : l.n; sel.appendChild(o); });
+    sel.style.display = 'block'; sel.onchange = () => sel.value && pick(sel.value); out.textContent = '';
+  } catch { out.textContent = 'Liste impossible à lire : le serveur refuse l’accès depuis un site web (CORS), ou pas de réseau.'; }
+};
+$('diag').onclick = async () => {
+  const c = map.getCenter(), out = []; $('dOut').textContent = 'Test en cours…';
+  for (const k of ['base', 'dem', 'sat', 'peup']) {
+    if (k === 'sat' && !(cfg.satUrl && cfg.satLayer)) { out.push('sat : couche non choisie (utilise « Lire les couches satellite »)'); continue; }
+    const d = LAYERS[k], z = Math.min(Math.max(d.minZ, 13), d.maxZ), u = d.url(z, lon2x(c.lng, z), lat2y(c.lat, z));
+    try { const r = await fetch(u, { mode: 'cors' }), t = r.headers.get('content-type') || '';
+      out.push(!r.ok ? `${k} : erreur HTTP ${r.status}` : /image/.test(t) ? `${k} : OK (${Math.round((await r.blob()).size / 1024)} Ko)` : `${k} : réponse inattendue : ${(await r.text()).replace(/\s+/g, ' ').slice(0, 160)}`);
+    } catch { out.push(`${k} : bloqué (CORS ou réseau)`); }
+  }
+  $('dOut').textContent = out.join('\n');
+};
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script></body></html>
